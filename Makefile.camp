@@ -36,6 +36,15 @@ JOBS  ?= $(NPROC)
 # Use QEMU's bundled meson from pyvenv to avoid version mismatch
 MESON = $(BUILD_DIR)/pyvenv/bin/meson
 
+# GPGPU kernel build helpers. Kernel sources are RV32 assembly files that are
+# converted to raw little-endian binaries and loaded by the guest runtime.
+GPGPU_KERNEL_DIR := $(SRC_DIR)/hw/gpgpu/gpgpu_kernel
+GPGPU_KERNEL_CC ?= clang
+GPGPU_KERNEL_OBJCOPY ?= llvm-objcopy
+GPGPU_KERNEL_CFLAGS ?= --target=riscv32-unknown-elf -march=rv32imf -mabi=ilp32f -c
+GPGPU_KERNELS := $(GPGPU_KERNEL_DIR)/VecAdd.bin
+
+
 # ─── Default target ──────────────────────────────────────────────────
 
 .PHONY: help
@@ -81,8 +90,17 @@ $(BUILD_DIR)/config-host.mak:
 
 # ─── Build ────────────────────────────────────────────────────────────
 
+.PHONY: gpgpu-kernels
+gpgpu-kernels: $(GPGPU_KERNELS)
+
+$(GPGPU_KERNEL_DIR)/%.o: $(GPGPU_KERNEL_DIR)/%.S
+	$(GPGPU_KERNEL_CC) $(GPGPU_KERNEL_CFLAGS) $< -o $@
+
+$(GPGPU_KERNEL_DIR)/%.bin: $(GPGPU_KERNEL_DIR)/%.o
+	$(GPGPU_KERNEL_OBJCOPY) -O binary -j .text $< $@
+
 .PHONY: build
-build: $(BUILD_DIR)/config-host.mak
+build: $(BUILD_DIR)/config-host.mak gpgpu-kernels
 	$(MAKE) -C $(BUILD_DIR) -j$(JOBS)
 	@echo "--- Build done ---"
 
@@ -138,6 +156,7 @@ test-gpgpu: build
 	    if $(BUILD_DIR)/tests/qtest/qos-test \
 	        -p /riscv64/virt/generic-pcihost/pci-bus-generic/pci-bus/gpgpu/gpgpu-tests/$$t \
 	        --tap -k 2>/dev/null | grep -q "^ok "; then \
+#			--tap -k 2 | grep -q "^ok "; then \
 	        passed=$$((passed + 1)); \
 	    fi; \
 	done; \
@@ -191,6 +210,7 @@ test: test-cpu test-soc test-gpgpu test-rust
 
 .PHONY: clean
 clean:
+	@rm -f $(GPGPU_KERNEL_DIR)/*.o $(GPGPU_KERNEL_DIR)/*.bin
 	@if [ -d $(BUILD_DIR) ] && [ -f $(BUILD_DIR)/build.ninja ]; then \
 	    $(MAKE) -C $(BUILD_DIR) clean; \
 	fi

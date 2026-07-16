@@ -4,7 +4,16 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "gpgpu_core.h"
+#include "../gpgpu_core.h"
+#include "inst.h"
+
+/*
+ * 指令解释器入口。
+ * gpgpu_core.c 负责调度 kernel/warp/lane，
+ * 这里负责把 lane 当前取到的 ctx->inst 解码并执行。
+ */
+int gpgpu_decode_exec(GPGPUState *s, GPGPULane *lane,
+                             GPGPUDecode *ctx);
 
 /*
  * fpr[] 中保存的是寄存器原始 bit，不是 C 语言的 float 对象。
