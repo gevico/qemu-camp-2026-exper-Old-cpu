@@ -65,9 +65,18 @@ int gpgpu_core_exec_warp(GPGPUState *s, GPGPUWarp *warp, uint32_t max_cycles)
             continue;
         }
 
-        s->simt.thread_id[0] = warp->thread_id_base + lane;
-        s->simt.thread_id[1] = 0;
-        s->simt.thread_id[2] = 0;
+        uint32_t thread_linear = warp->thread_id_base + lane;
+        uint32_t block_dim_x = s->kernel.block_dim[0];
+        uint32_t block_dim_y = s->kernel.block_dim[1];
+        uint64_t block_xy = (uint64_t)block_dim_x * block_dim_y;
+
+        if (!block_dim_x || !block_dim_y || !block_xy) {
+            return -1;
+        }
+
+        s->simt.thread_id[0] = thread_linear % block_dim_x;
+        s->simt.thread_id[1] = (thread_linear / block_dim_x) % block_dim_y;
+        s->simt.thread_id[2] = thread_linear / block_xy;
         s->simt.block_id[0] = warp->block_id[0];
         s->simt.block_id[1] = warp->block_id[1];
         s->simt.block_id[2] = warp->block_id[2];

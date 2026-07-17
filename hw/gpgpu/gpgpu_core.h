@@ -46,6 +46,27 @@ typedef struct GPGPUState GPGPUState;
  */
 #define CSR_MHARTID             0xF14
 
+/*
+ * EvoGPU kernel ABI 使用的自定义 CSR。
+ *
+ * 这些 CSR 只在本教学 GPGPU 解释器中有效，用来给 kernel 暴露类似
+ * CUDA 内置变量的执行上下文。kernel 通过 csrrs rd, csr, x0 读取。
+ */
+#define CSR_GPGPU_THREAD_ID_X   0x7C0
+#define CSR_GPGPU_THREAD_ID_Y   0x7C1
+#define CSR_GPGPU_THREAD_ID_Z   0x7C2
+#define CSR_GPGPU_BLOCK_ID_X    0x7C3
+#define CSR_GPGPU_BLOCK_ID_Y    0x7C4
+#define CSR_GPGPU_BLOCK_ID_Z    0x7C5
+#define CSR_GPGPU_BLOCK_DIM_X   0x7C6
+#define CSR_GPGPU_BLOCK_DIM_Y   0x7C7
+#define CSR_GPGPU_BLOCK_DIM_Z   0x7C8
+#define CSR_GPGPU_GRID_DIM_X    0x7C9
+#define CSR_GPGPU_GRID_DIM_Y    0x7CA
+#define CSR_GPGPU_GRID_DIM_Z    0x7CB
+#define CSR_GPGPU_WARP_ID       0x7CC
+#define CSR_GPGPU_LANE_ID       0x7CD
+
 #define MHARTID_THREAD_BITS     5
 #define MHARTID_WARP_BITS       8
 #define MHARTID_BLOCK_BITS      19

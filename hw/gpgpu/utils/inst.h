@@ -7,6 +7,7 @@ typedef enum GPGPUInstType {
     TYPE_NONE,
     TYPE_R,
     TYPE_I,
+    TYPE_B,
     TYPE_S,
     TYPE_U,
 } GPGPUInstType;
@@ -41,6 +42,14 @@ static inline int32_t imm_s(uint32_t inst)
     return sext((BITS(inst, 31, 25) << 5) | BITS(inst, 11, 7), 12);
 }
 
+static inline int32_t imm_b(uint32_t inst)
+{
+    return sext((BITS(inst, 31, 31) << 12) |
+                (BITS(inst, 7, 7) << 11) |
+                (BITS(inst, 30, 25) << 5) |
+                (BITS(inst, 11, 8) << 1), 13);
+}
+
 static inline int32_t imm_u(uint32_t inst)
 {
     return inst & 0xfffff000u;
@@ -57,6 +66,9 @@ static inline void decode_operand(GPGPUDecode *ctx, GPGPUInstType type)
     switch (type) {
     case TYPE_I:
         ctx->imm = imm_i(inst);
+        break;
+    case TYPE_B:
+        ctx->imm = imm_b(inst);
         break;
     case TYPE_S:
         ctx->imm = imm_s(inst);

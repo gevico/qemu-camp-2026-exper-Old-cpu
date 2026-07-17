@@ -3,6 +3,67 @@
 #include "../gpgpu.h"
 #include "../gpgpu_core.h"
 
+static int gpgpu_read_csr(GPGPUState *s, GPGPULane *lane,
+                          uint32_t csr, uint32_t *val)
+{
+    switch (csr) {
+    case CSR_MHARTID:
+        *val = lane->mhartid;
+        return 0;
+    case CSR_GPGPU_THREAD_ID_X:
+        *val = s->simt.thread_id[0];
+        return 0;
+    case CSR_GPGPU_THREAD_ID_Y:
+        *val = s->simt.thread_id[1];
+        return 0;
+    case CSR_GPGPU_THREAD_ID_Z:
+        *val = s->simt.thread_id[2];
+        return 0;
+    case CSR_GPGPU_BLOCK_ID_X:
+        *val = s->simt.block_id[0];
+        return 0;
+    case CSR_GPGPU_BLOCK_ID_Y:
+        *val = s->simt.block_id[1];
+        return 0;
+    case CSR_GPGPU_BLOCK_ID_Z:
+        *val = s->simt.block_id[2];
+        return 0;
+    case CSR_GPGPU_BLOCK_DIM_X:
+        *val = s->kernel.block_dim[0];
+        return 0;
+    case CSR_GPGPU_BLOCK_DIM_Y:
+        *val = s->kernel.block_dim[1];
+        return 0;
+    case CSR_GPGPU_BLOCK_DIM_Z:
+        *val = s->kernel.block_dim[2];
+        return 0;
+    case CSR_GPGPU_GRID_DIM_X:
+        *val = s->kernel.grid_dim[0];
+        return 0;
+    case CSR_GPGPU_GRID_DIM_Y:
+        *val = s->kernel.grid_dim[1];
+        return 0;
+    case CSR_GPGPU_GRID_DIM_Z:
+        *val = s->kernel.grid_dim[2];
+        return 0;
+    case CSR_GPGPU_WARP_ID:
+        *val = s->simt.warp_id;
+        return 0;
+    case CSR_GPGPU_LANE_ID:
+        *val = s->simt.lane_id;
+        return 0;
+    default:
+        return -1;
+    }
+}
+
+static inline void gpgpu_branch(GPGPUDecode *ctx, bool taken)
+{
+    if (taken) {
+        ctx->snpc = (uint32_t)((int32_t)ctx->pc + ctx->imm);
+    }
+}
+
 int gpgpu_decode_exec(GPGPUState *s, GPGPULane *lane,
                              GPGPUDecode *ctx){
 #define R(i) lane->gpr[(i)]
@@ -79,6 +140,36 @@ int gpgpu_decode_exec(GPGPUState *s, GPGPULane *lane,
         G(rd) = (int32_t)src1 - (int32_t)src2;
     });
 
+    INSTPAT("??????? ????? ????? 000 ????? 11000 11",
+            beq, TYPE_B, {
+        gpgpu_branch(ctx, src1 == src2);
+    });
+
+    INSTPAT("??????? ????? ????? 001 ????? 11000 11",
+            bne, TYPE_B, {
+        gpgpu_branch(ctx, src1 != src2);
+    });
+
+    INSTPAT("??????? ????? ????? 100 ????? 11000 11",
+            blt, TYPE_B, {
+        gpgpu_branch(ctx, (int32_t)src1 < (int32_t)src2);
+    });
+
+    INSTPAT("??????? ????? ????? 101 ????? 11000 11",
+            bge, TYPE_B, {
+        gpgpu_branch(ctx, (int32_t)src1 >= (int32_t)src2);
+    });
+
+    INSTPAT("??????? ????? ????? 110 ????? 11000 11",
+            bltu, TYPE_B, {
+        gpgpu_branch(ctx, src1 < src2);
+    });
+
+    INSTPAT("??????? ????? ????? 111 ????? 11000 11",
+            bgeu, TYPE_B, {
+        gpgpu_branch(ctx, src1 >= src2);
+    });
+
     INSTPAT("??????? ????? ????? 010 ????? 01000 11",
             sw, TYPE_S, {
         uint32_t addr = src1 + imm;
@@ -91,12 +182,13 @@ int gpgpu_decode_exec(GPGPUState *s, GPGPULane *lane,
     INSTPAT("???????????? ????? 010 ????? 11100 11",
             csrrs, TYPE_I, {
         uint32_t csr = ctx->inst >> 20;
+        uint32_t value;
 
-        if (csr != CSR_MHARTID) {
+        if (gpgpu_read_csr(s, lane, csr, &value) < 0) {
             return -1;
         }
 
-        G(rd) = lane->mhartid;
+        G(rd) = value;
     });
 
     INSTPAT("0000000 00001 00000 000 00000 11100 11",
@@ -142,6 +234,12 @@ int gpgpu_decode_exec(GPGPUState *s, GPGPULane *lane,
     INSTPAT("1111000 00000 ????? 000 ????? 10100 11",
             fmv_w_x, TYPE_R, {
         lane->fpr[ctx->rd] = src1;
+    });
+
+    /* fmv.x.w 不做数值转换，只把 f[rs1] 的 32 位原始 bit 搬到 x[rd]。 */
+    INSTPAT("1110000 00000 ????? 000 ????? 10100 11",
+            fmv_x_w, TYPE_R, {
+        G(rd) = lane->fpr[ctx->rs1];
     });
 
     /* 自定义低精度浮点转换指令子集：BF16、E4M3、E5M2、E2M1。 */
